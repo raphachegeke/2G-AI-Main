@@ -109,7 +109,7 @@ Keep it short, local, and motivating.
           await sms.send({
             to: [phone],
             message: `🎓 Career Buddy AI for ${location}:\n\n${aiReply}\n\n🚀 Keep learning, you can ask any other question!`,
-            from: '+254748397839'
+            from: '+254788383053'
           });
 
           response = `END ${shortReply}\n📩 Full info sent via SMS.`;
