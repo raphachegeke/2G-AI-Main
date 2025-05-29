@@ -108,7 +108,7 @@ Keep it short, local, and motivating.
 
           await sms.send({
             to: [phone],
-            message: `🎓 Career Buddy AI for ${location}:\n\n${aiReply}\n\n🚀 Keep learning, you're on the right path!`,
+            message: `🎓 Career Buddy AI for ${location}:\n\n${aiReply}\n\n🚀 Keep learning, you can ask any other question!`,
             from: '5679'
           });
 

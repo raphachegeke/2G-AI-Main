@@ -50,7 +50,7 @@ module.exports = async (req, res) => {
 
       await sms.send({
         to: [senderNumber],
-        message: aiReply,
+        message: aiReply + ' you are free to ask anything else',
         from: "5679"
       });
 
