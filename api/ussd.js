@@ -142,14 +142,14 @@ Keep response under 160 characters for SMS.
             const aiRes = await axios.post(
               'https://api.openai.com/v1/chat/completions',
               {
-                model: 'gpt-4',
+                model: 'gpt-3.5-turbo',
                 messages: [{ role: 'user', content: prompt }],
                 temperature: 0.5,  // More deterministic for medical advice
                 max_tokens: 200
               },
               {
                 headers: {
-                  Authorization: "Bearer ${process.env.OPENAI_API_KEY}",
+                  Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
                   'Content-Type': 'application/json'
                 },
                 timeout: 15000
@@ -303,8 +303,8 @@ Your ID: ${appointmentId}`;
           if (inputs.length === 1) {
             response = 'CON Your Appointments (${userAppointments.length}):\n' +
               userAppointments.slice(0, 3).map(([id, details], index) => 
-                "${index + 1}. ${details.date} ${details.time}\n   ${id}).join('\n')" +
-              '\n99. Back to menu');
+                `${index + 1}. ${details.date} ${details.time}\n   ${id}`).join('\n') +
+              `\n99. Back to menu`;
           }
           // Step 2: Appointment details
           else if (inputs.length === 2) {
