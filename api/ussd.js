@@ -5,8 +5,24 @@ const africastalking = require('africastalking')({
 });
 const sms = africastalking.SMS;
 
-// Mock database for appointments
+// Mock database for appointments and payments
 const appointmentsDB = new Map();
+const paymentsDB = new Map();
+
+// Payment configuration
+const PAYMENT_OPTIONS = {
+  '1': { name: 'M-Pesa', fee: 50, description: 'M-Pesa (KSh 50 convenience fee)' },
+  '2': { name: 'Insurance', fee: 0, description: 'Insurance Billing (No fee)' },
+  '3': { name: 'Cash', fee: 0, description: 'Pay at Facility (No fee)' }
+};
+
+// Facility pricing
+const FACILITY_PRICES = {
+  '1': 200,  // Public Hospital
+  '2': 500,  // Private Clinic
+  '3': 800,  // Specialized Center
+  '4': 100   // Pharmacy
+};
 
 module.exports = async (req, res) => {
   if (req.method !== 'POST') {
@@ -17,7 +33,7 @@ module.exports = async (req, res) => {
   // Validate environment variables
   if (!process.env.AFRICASTALKING_API_KEY || 
       !process.env.AFRICASTALKING_USERNAME || 
-      !process.env.OPENAI_API_KEY) {
+      !process.env.COHERE_API_KEY) {
     console.error('Missing required environment variables');
     res.status(500).setHeader('Content-Type', 'text/plain');
     return res.end('Service configuration error. Please try again later.');
@@ -45,6 +61,58 @@ module.exports = async (req, res) => {
 
       const validatePhone = (phone) => {
         return phone && phone.length >= 10 && /^\+?\d+$/.test(phone);
+      };
+
+      // Simulate M-Pesa payment (in a real app, you'd use Safaricom API)
+      const processMpesaPayment = async (phone, amount, reference) => {
+        console.log(`Simulating M-Pesa payment of KSh ${amount} to ${phone} for ${reference}`);
+        const paymentCode = MP`${Math.random().toString().substr(2, 6)}`;
+        return {
+          success: true,
+          code: paymentCode,
+          message:`Payment of KSh ${amount} initiated. Enter M-Pesa PIN to complete.`
+        };
+      };
+
+      // Cohere AI medical assessment
+      const getMedicalAssessment = async (age, gender, symptom, duration) => {
+        try {
+          const prompt = `As a medical AI assistant in Kenya, analyze this case:
+Patient: ${gender}, ${age} years
+Symptom: ${symptom} for ${duration} days
+
+Provide structured assessment:
+1. Likely Condition (most probable 1-2)
+2. Red Flags (if any)
+3. Risk Level (Low/Medium/High)
+4. Immediate Action (Self-care/Clinic within 24h/Emergency)
+5. Recommended Clinic Type (GP/Specialist/Hospital)
+
+Consider common Kenyan conditions like malaria, typhoid, etc.
+Keep response concise and under 160 characters for SMS.`;
+
+          const aiRes = await axios.post(
+            'https://api.cohere.ai/v1/chat',
+            {
+              model: 'command-r-plus',
+              message: prompt,
+              temperature: 0.5,
+              max_tokens: 200
+            },
+            {
+              headers: {
+                Authorization: `Bearer ${process.env.COHERE_API_KEY}`,
+                'Content-Type': 'application/json'
+              },
+              timeout: 15000
+            }
+          );
+
+          return aiRes.data.text?.trim() || "Unable to generate assessment. Please consult a doctor.";
+        } catch (err) {
+          console.error('Cohere API error:', err);
+          return "Medical assessment service is currently unavailable. Please visit a healthcare provider.";
+        }
       };
 
       // Step 0: Main Menu
@@ -99,7 +167,7 @@ module.exports = async (req, res) => {
           } else {
             const genderMap = { '1': 'Male', '2': 'Female', '3': 'Other' };
             const gender = genderMap[inputs[2]] || 'Unknown';
-            
+
             response = `CON Confirm your details:
 Age: ${inputs[1]}
 Gender: ${gender}
@@ -121,43 +189,8 @@ Duration: ${inputs[4]} days
             const genderMap = { '1': 'Male', '2': 'Female', '3': 'Other' };
             const gender = genderMap[genderSelection] || 'Unknown';
 
-            // Enhanced AI prompt with clinical guidelines
-            const prompt = `
-As a medical AI assistant in Kenya, analyze this case:
+            const aiReply = await getMedicalAssessment(age, gender, symptom, duration);
 
-Patient: ${gender}, ${age} years
-Symptom: ${symptom} for ${duration} days
-
-Provide structured assessment:
-1. Likely Condition (most probable 1-2)
-2. Red Flags (if any)
-3. Risk Level (Low/Medium/High)
-4. Immediate Action (Self-care/Clinic within 24h/Emergency)
-5. Recommended Clinic Type (GP/Specialist/Hospital)
-
-Consider common Kenyan conditions like malaria, typhoid, etc.
-Keep response under 160 characters for SMS.
-            `.trim();
-
-            const aiResponse = await axios.post(
-                  'https://api.cohere.ai/v1/chat',
-                  {
-                    model: 'command-r-plus',
-                    message: `Respond to the following SMS message in a respectful, clear, and helpful tone: "${userMessage}"`,
-                    temperature: 0.7
-                  },
-                  {
-                    headers: {
-                      Authorization: `Bearer ${process.env.COHERE_API_KEY}`,
-                      'Content-Type': 'application/json'
-                    }
-                  }
-                );
-
-            const aiReply = aiRes.data?.choices?.[0]?.message?.content?.trim();
-            if (!aiReply) throw new Error('Empty AI response');
-
-            // Enhanced SMS formatting
             const smsMessage = `🩺 AfyaLink Assessment:
 ${aiReply}
 
@@ -185,17 +218,15 @@ For emergencies, call 911.`;
         }
       }
 
-      
-
       // ========== BOOK CLINIC VISIT FLOW ========== //
       else if (inputs[0] === '2') {
         // Step 1: Select facility type
         if (inputs.length === 1) {
           response = `CON Select facility type:
-1. Public Hospital
-2. Private Clinic
-3. Specialized Center
-4. Pharmacy`;
+1. Public Hospital (KSh 200)
+2. Private Clinic (KSh 500)
+3. Specialized Center (KSh 800)
+4. Pharmacy (KSh 100)`;
         }
         // Step 2: Select location
         else if (inputs.length === 2) {
@@ -217,7 +248,6 @@ Example: 15-08-2023`;
         }
         // Step 4: Select time
         else if (inputs.length === 4) {
-          // Basic date validation
           const dateRegex = /^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[012])-(20\d\d)$/;
           if (!dateRegex.test(inputs[3])) {
             response = 'END Invalid date format. Use DD-MM-YYYY';
@@ -228,85 +258,193 @@ Example: 15-08-2023`;
 3. Evening (4PM-8PM)`;
           }
         }
-        // Step 5: Confirmation
+        // Step 5: Payment method selection
         else if (inputs.length === 5) {
           if (!['1', '2', '3'].includes(inputs[4])) {
             response = 'END Invalid time selection';
           } else {
-            const facilityTypes = { '1': 'Public Hospital', '2': 'Private Clinic', '3': 'Specialized Center', '4': 'Pharmacy' };
-            const counties = { '1': 'Nairobi', '2': 'Mombasa', '3': 'Kisumu', '4': 'Nakuru', '5': 'Other' };
-            const times = { '1': 'Morning', '2': 'Afternoon', '3': 'Evening' };
+            const facilityType = inputs[1];
+            const basePrice = FACILITY_PRICES[facilityType] || 0;
+            
+            response = `CON Select payment method (Base Fee: KSh ${basePrice}):
+1. ${PAYMENT_OPTIONS['1'].description}
+2. ${PAYMENT_OPTIONS['2'].description}
+3. ${PAYMENT_OPTIONS['3'].description}`;
+          }
+        }
+        // Step 6: Payment processing
+        else if (inputs.length === 6) {
+          const paymentMethod = inputs[5];
+          if (!['1', '2', '3'].includes(paymentMethod)) {
+            response = 'END Invalid payment method';
+          } else {
+            const selectedOption = PAYMENT_OPTIONS[paymentMethod];
+            const facilityType = inputs[1];
+            const basePrice = FACILITY_PRICES[facilityType] || 0;
+            const totalAmount = basePrice + selectedOption.fee;
 
-            response = `CON Confirm appointment:
-Facility: ${facilityTypes[inputs[1]]}
-County: ${counties[inputs[2]]}
-Date: ${inputs[3]}
-Time: ${times[inputs[4]]}
+            if (paymentMethod === '1') {
+              try {
+                const paymentRef =` APPT-${Math.random().toString(36).substr(2, 6)}`;
+                const paymentResult = await processMpesaPayment(phone, totalAmount, paymentRef);
+
+                if (paymentResult.success) {
+                  paymentsDB.set(paymentRef, {
+                    phone,
+                    amount: totalAmount,
+                    method: 'M-Pesa',
+                    status: 'pending',
+                    facilityType,
+                    appointmentDetails: {
+                      county: inputs[2],
+                      date: inputs[3],
+                      time: inputs[4]
+                    }
+                  });
+
+                  response = `CON ${paymentResult.message}
+1. I've completed payment
+2. Cancel booking`;
+                } else {
+                  response = 'END Payment initiation failed. Please try again.';
+                }
+              } catch (err) {
+                console.error('Payment error:', err);
+                response = 'END Payment service unavailable. Please try cash option.';
+              }
+            } 
+            else {
+              response = `CON Confirm booking:
+Facility: ${FACILITY_PRICES[inputs[1]]}
+Payment: ${selectedOption.name}
+Total: KSh ${totalAmount}
 
 1. Confirm booking
 2. Cancel`;
+            }
           }
         }
-        // Step 6: Process booking
-        else if (inputs.length === 6 && inputs[5] === '1') {
-          try {
-            // Generate appointment ID
-            const appointmentId = 'APPT-' + Math.random().toString(36).substr(2, 8).toUpperCase();
-            const appointmentDetails = {
-              phone: phone,
-              facilityType: inputs[1],
-              county: inputs[2],
-              date: inputs[3],
-              time: inputs[4],
-              status: 'booked',
-              createdAt: new Date().toISOString()
-            };
+        // Step 7: Payment verification or final confirmation
+        else if (inputs.length === 7) {
+          const paymentMethod = inputs[5];
+          
+          if (paymentMethod === '1') {
+            if (inputs[6] === '1') {
+              const paymentEntries = Array.from(paymentsDB.entries())
+                .filter(([_, p]) => p.phone === phone && p.status === 'pending');
+              
+              if (paymentEntries.length > 0) {
+                const [paymentRef, payment] = paymentEntries[0];
+                
+                payment.status = 'completed';
+                paymentsDB.set(paymentRef, payment);
+                
+                const appointmentId = 'APPT-' + Math.random().toString(36).substr(2, 8).toUpperCase();
+                const appointmentDetails = {
+                  phone,
+                  facilityType: payment.facilityType,
+                  county: payment.appointmentDetails.county,
+                  date: payment.appointmentDetails.date,
+                  time: payment.appointmentDetails.time,
+                  payment: {
+                    method: payment.method,
+                    amount: payment.amount,
+                    reference: paymentRef
+                  },
+                  status: 'booked',
+                  createdAt: new Date().toISOString()
+                };
 
-            // Store in mock DB
-            appointmentsDB.set(appointmentId, appointmentDetails);
+                appointmentsDB.set(appointmentId, appointmentDetails);
 
-            // Send confirmation SMS
-            await sms.send({
-              to: [phone],
-              message: `📅 AfyaLink Appointment Confirmed:
+                await sms.send({
+                  to: [phone],
+                  message: `📅 AfyaLink Appointment Confirmed:
 ID: ${appointmentId}
 Date: ${appointmentDetails.date}
 Time: ${appointmentDetails.time}
 Facility: ${appointmentDetails.county} ${appointmentDetails.facilityType}
+Paid: KSh ${payment.amount} via ${payment.method}
 
-Bring your ID and insurance card.`,
-              from: 'AFYALINK'
-            });
+Bring your ID and payment receipt.`,
+                  from: 'AFYALINK'
+                });
 
-            response = `END Appointment booked! Check SMS for details.
+                response = `END Appointment booked! Check SMS for details.
 Your ID: ${appointmentId}`;
-          } catch (err) {
-            console.error('Booking error:', err);
-            response = 'END Failed to book appointment. Please try again.';
+              } else {
+                response = 'END Payment verification failed. Please start over.';
+              }
+            } else {
+              response = 'END Booking cancelled. Dial *384*57054# to restart.';
+            }
           }
-        }
-        else {
-          response = 'END Booking cancelled. Dial *384*57054# to restart.';
+          else {
+            if (inputs[6] === '1') {
+              const selectedOption = PAYMENT_OPTIONS[paymentMethod];
+              const facilityType = inputs[1];
+              const basePrice = FACILITY_PRICES[facilityType] || 0;
+              const totalAmount = basePrice + selectedOption.fee;
+
+              const appointmentId = 'APPT-' + Math.random().toString(36).substr(2, 8).toUpperCase();
+              const appointmentDetails = {
+                phone,
+                facilityType: inputs[1],
+                county: inputs[2],
+                date: inputs[3],
+                time: inputs[4],
+                payment: {
+                  method: selectedOption.name,
+                  amount: totalAmount,
+                  reference: paymentMethod === '2' ? 'INSURANCE' : 'CASH'
+                },
+                status: 'booked',
+                createdAt: new Date().toISOString()
+              };
+
+              appointmentsDB.set(appointmentId, appointmentDetails);
+
+              let smsMessage = `📅 AfyaLink Appointment Confirmed:
+ID: ${appointmentId}
+Date: ${appointmentDetails.date}
+Time: ${appointmentDetails.time}
+Facility: ${appointmentDetails.county} ${appointmentDetails.facilityType}`;
+
+              if (paymentMethod === '2') {
+                smsMessage += '\nPayment: Insurance billing (bring card)';
+              } else {
+                `smsMessage += \nPayment: Pay KSh ${totalAmount} at facility`;
+              }
+
+              await sms.send({
+                to: [phone],
+                message: smsMessage + '\n\nBring your ID and insurance card.',
+                from: 'AFYALINK'
+              });
+
+              response = `END Appointment booked! Check SMS for details.
+Your ID: ${appointmentId}`;
+            } else {
+              response = 'END Booking cancelled. Dial *384*57054# to restart.';
+            }
+          }
         }
       }
 
       // ========== MY APPOINTMENTS FLOW ========== //
       else if (inputs[0] === '3') {
-        // Get all appointments for this phone number
         const userAppointments = Array.from(appointmentsDB.entries())
           .filter(([id, details]) => details.phone === phone);
 
         if (userAppointments.length === 0) {
           response = 'END You have no upcoming appointments.';
         } else {
-          // Step 1: List appointments
           if (inputs.length === 1) {
-            response = 'CON Your Appointments (${userAppointments.length}):\n' +
+            response = 'CON Your Appointments:\n' +
               userAppointments.slice(0, 3).map(([id, details], index) => 
-                `${index + 1}. ${details.date} ${details.time}\n   ${id}`).join('\n') +
-              `\n99. Back to menu`;
+                `${index + 1}. ${details.date} ${details.time}\n `  `${id} (${details.payment.method})`).join('\n') +
+             ` \n99. Back to menu`;
           }
-          // Step 2: Appointment details
           else if (inputs.length === 2) {
             const selected = parseInt(inputs[1]) - 1;
             if (selected >= 0 && selected < userAppointments.length) {
@@ -316,9 +454,11 @@ ID: ${id}
 Date: ${details.date}
 Time: ${details.time}
 Facility: ${details.county} ${details.facilityType}
+Payment: ${details.payment.method} (KSh ${details.payment.amount})
 
 1. Reschedule
 2. Cancel
+3. Payment Receipt
 99. Back`;
             } else if (inputs[1] === '99') {
               response = 'END Returning to main menu.';
@@ -326,64 +466,60 @@ Facility: ${details.county} ${details.facilityType}
               response = 'END Invalid selection.';
             }
           }
-          // Step 3: Handle reschedule/cancel
           else if (inputs.length === 3) {
             const selected = parseInt(inputs[1]) - 1;
             if (selected >= 0 && selected < userAppointments.length) {
               const [id, details] = userAppointments[selected];
-              
-              if (inputs[2] === '1') { // Reschedule
+
+              if (inputs[2] === '1') {
                 response = "CON Enter new date (DD-MM-YYYY):";
               } 
-              else if (inputs[2] === '2') { // Cancel
-                appointmentsDB.delete(id);
-                response = 'END Appointment cancelled successfully.';
+              else if (inputs[2] === '2') {
+                if (details.payment.method === 'M-Pesa' && details.payment.amount > 0) {
+                  response =` CON Refund of KSh ${details.payment.amount} will be processed. Confirm cancellation:
+1. Yes, cancel appointment
+2. No, keep appointment`;
+                } else {
+                  appointmentsDB.delete(id);
+                  response = 'END Appointment cancelled successfully.';
+                }
+              }
+              else if (inputs[2] === '3') {
+                await sms.send({
+                  to: [phone],
+                  message: `🧾 AfyaLink Receipt:
+Appointment: ${id}
+Date: ${details.date}
+Amount: KSh ${details.payment.amount}
+Method: ${details.payment.method}
+Ref: ${details.payment.reference}`,
+                  from: 'AFYALINK'
+                });
+                response = 'END Payment receipt sent to your phone.';
               }
               else {
                 response = 'END Invalid option.';
               }
             }
           }
-          // Step 4: Process rescheduling
-          else if (inputs.length === 4) {
+          else if (inputs.length === 4 && inputs[2] === '2') {
             const selected = parseInt(inputs[1]) - 1;
             if (selected >= 0 && selected < userAppointments.length) {
               const [id, details] = userAppointments[selected];
-              const dateRegex = /^(0[1-9]|[12][0-9]|3[01])-(0[1-9]|1[012])-(20\d\d)$/;
-              
-              if (!dateRegex.test(inputs[3])) {
-                response = 'END Invalid date format. Use DD-MM-YYYY';
-              } else {
-                details.date = inputs[3];
-                response = `CON Select new time:
-1. Morning (8AM-12PM)
-2. Afternoon (12PM-4PM)
-3. Evening (4PM-8PM)`;
-              }
-            }
-          }
-          // Step 5: Confirm rescheduling
-          else if (inputs.length === 5) {
-            const selected = parseInt(inputs[1]) - 1;
-            if (selected >= 0 && selected < userAppointments.length) {
-              const [id, details] = userAppointments[selected];
-              
-              if (!['1', '2', '3'].includes(inputs[4])) {
-                response = 'END Invalid time selection';
-              } else {
-                const times = { '1': 'Morning', '2': 'Afternoon', '3': 'Evening' };
-                details.time = times[inputs[4]];
+
+              if (inputs[3] === '1') {
+                console.log(`Processing refund of KSh ${details.payment.amount} for ${id}`);
+                appointmentsDB.delete(id);
                 
                 await sms.send({
                   to: [phone],
-                  message: `🔄 AfyaLink Appointment Updated:
-ID: ${id}
-New Date: ${details.date}
-New Time: ${details.time}`,
+                  message: `🔄 Appointment ${id} cancelled. Refund of KSh ${details.payment.amount} will be processed within 3 days.`,
                   from: 'AFYALINK'
                 });
                 
-                response = 'END Appointment rescheduled successfully. Check SMS.';
+                response = 'END Appointment cancelled. Refund initiated.';
+              } else {
+                response = 'END Cancellation aborted. Appointment remains booked.';
               }
             }
           }
@@ -394,8 +530,6 @@ New Time: ${details.time}`,
       else if (inputs[0] === '99') {
         response = 'END Thank you for using AfyaLink. Stay healthy!';
       }
-
-      // Invalid main menu option
       else {
         response = 'END Invalid option. Please dial *384*57054# to start again.';
       }
