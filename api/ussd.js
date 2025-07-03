@@ -139,22 +139,20 @@ Consider common Kenyan conditions like malaria, typhoid, etc.
 Keep response under 160 characters for SMS.
             `.trim();
 
-            const aiRes = await axios.post(
-              'https://api.openai.com/v1/chat/completions',
-              {
-                model: 'gpt-3.5-turbo',
-                messages: [{ role: 'user', content: prompt }],
-                temperature: 0.5,  // More deterministic for medical advice
-                max_tokens: 200
-              },
-              {
-                headers: {
-                  Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
-                  'Content-Type': 'application/json'
-                },
-                timeout: 15000
-              }
-            );
+            const aiResponse = await axios.post(
+                  'https://api.cohere.ai/v1/chat',
+                  {
+                    model: 'command-r-plus',
+                    message: `Respond to the following SMS message in a respectful, clear, and helpful tone: "${userMessage}"`,
+                    temperature: 0.7
+                  },
+                  {
+                    headers: {
+                      Authorization: `Bearer ${process.env.COHERE_API_KEY}`,
+                      'Content-Type': 'application/json'
+                    }
+                  }
+                );
 
             const aiReply = aiRes.data?.choices?.[0]?.message?.content?.trim();
             if (!aiReply) throw new Error('Empty AI response');
@@ -186,6 +184,8 @@ For emergencies, call 911.`;
           response = 'END Invalid option. Please start again.';
         }
       }
+
+      
 
       // ========== BOOK CLINIC VISIT FLOW ========== //
       else if (inputs[0] === '2') {
