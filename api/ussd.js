@@ -199,7 +199,7 @@ For emergencies, call 911 or go to nearest hospital.`;
             await sms.send({
               to: [phone],
               message: smsMessage.slice(0, 160),
-              from: 'AFYALINK'
+              from: '5679'
             });
 
             response = `END Assessment complete. Check SMS for details.
