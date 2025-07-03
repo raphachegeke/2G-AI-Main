@@ -6,126 +6,157 @@ const africastalking = require('africastalking')({
 const sms = africastalking.SMS;
 
 module.exports = async (req, res) => {
-  if (req.method !== 'POST') return res.status(405).send('Only POST allowed');
+  if (req.method !== 'POST') {
+    res.status(405).setHeader('Content-Type', 'text/plain');
+    return res.end('Only POST allowed');
+  }
+
+  if (!process.env.AFRICASTALKING_API_KEY || !process.env.AFRICASTALKING_USERNAME || !process.env.OPENAI_API_KEY) {
+    res.status(500).setHeader('Content-Type', 'text/plain');
+    return res.end('Server configuration error');
+  }
 
   let body = '';
   req.on('data', chunk => { body += chunk.toString(); });
+  req.on('error', (err) => {
+    console.error('Request error:', err);
+    res.status(500).end('Request processing error');
+  });
 
   req.on('end', async () => {
-    const params = new URLSearchParams(body);
-    const text = params.get('text') || '';
-    const phone = params.get('phoneNumber');
-    const inputs = text.split('*');
-    let response = '';
+    try {
+      const params = new URLSearchParams(body);
+      const text = params.get('text') || '';
+      const phone = params.get('phoneNumber');
+      const inputs = text.split('*');
+      let response = '';
 
-    const interestMap = {
-      '1': 'Maths',
-      '2': 'Science',
-      '3': 'Languages',
-      '4': 'Technical work',
-      '5': 'Helping people'
-    };
+      // Step 0: Welcome Menu
+      if (text === '') {
+        response = `CON Welcome to AfyaLink 🏥
+1. Triage Me
+2. Book Clinic Visit
+3. My Appointments
+99. Exit`;
+      }
 
-    const subjectMap = {
-      '1': 'Maths',
-      '2': 'Science',
-      '3': 'English',
-      '4': 'Kiswahili',
-      '5': 'Computer Studies'
-    };
+      // Step 1: Age Input
+      else if (inputs.length === 1 && inputs[0] === '1') {
+        response =" CON Please enter your age (e.g. 24):";
+      }
 
-    // Step 0 - Welcome
-    if (text === '') {
-      response = `CON Welcome to Career Buddy AI 📱
-Find the best career and nearby training.
-1. Start\n99. Exit`;
-    }
-
-    // Step 1 - Interest
-    else if (inputs.length === 1) {
-      response = `CON What do you enjoy most?
-1. Maths
-2. Science
-3. Languages
-4. Technical work
-5. Helping people\n0. Back\n99. Exit`;
-    }
-
-    // Step 2 - Subject
-    else if (inputs.length === 2) {
-      response = `CON What subject are you best at?
-1. Maths
-2. Science
-3. English
-4. Kiswahili
-5. Computer\n0. Back\n99. Exit`;
-    }
-
-    // Step 3 - Location input
-    else if (inputs.length === 3) {
-      response = `CON What is your current location? (e.g. Kibera, Rongai, Thika)`;
-    }
-
-    // Step 4 - AI + SMS
-    else if (inputs.length === 4) {
-      const interest = interestMap[inputs[1]] || 'various topics';
-      const subject = subjectMap[inputs[2]] || 'several subjects';
-      const location = inputs[3]?.trim();
-
-      if (!phone || !location) {
-        response = 'END Missing location or phone number.';
-      } else {
-        try {
-          const aiPrompt = `
-You're an expert AI helping Kenyan students. A student from ${location} enjoys ${interest} and is best at ${subject}. 
-Suggest 2 affordable and nearby institutions they can join (e.g. NairoBits, TVETs, community colleges). 
-Also mention 2 ideal careers and a short reason why. 
-Format like:
-1. NairoBits Trust - offers coding & digital skills. Located in Nairobi.
-2. Career: Web Developer - fits students strong in ${subject}.
-Keep it short, local, and motivating.
-          `.trim();
-
-          const aiRes = await axios.post(
-            'https://api.cohere.ai/v1/chat',
-            {
-              model: 'command-r-plus',
-              message: aiPrompt,
-              temperature: 0.7
-            },
-            {
-              headers: {
-                Authorization: `Bearer ${process.env.COHERE_API_KEY}`,
-                'Content-Type': 'application/json'
-              }
-            }
-          );
-
-          const aiReply = aiRes.data?.text?.trim() || aiRes.data?.generations?.[0]?.text?.trim();
-          if (!aiReply) throw new Error('Empty AI response');
-
-          const shortReply = aiReply.split('. ').slice(0, 2).join('. ') + '.';
-
-          await sms.send({
-            to: [phone],
-            message: `🎓 Career Buddy AI for ${location}:\n\n${aiReply}\n\n🚀 Keep learning, you can ask any other question!`,
-            from: '+254788383053'
-          });
-
-          response = `END ${shortReply}\n📩 Full info sent via SMS.`;
-        } catch (err) {
-          console.error('AI/SMS error:', err.message);
-          response = 'END Sorry, something went wrong. Try again later.';
+      // Step 2: Gender Input
+      else if (inputs.length === 2 && inputs[0] === '1') {
+        const age = inputs[1];
+        if (!age || isNaN(age) || age < 0 || age > 120) {
+          response = 'END Please enter a valid age (0-120)';
+        } else {
+          response = `CON Select your gender:
+1. Male
+2. Female
+3. Other/Prefer not to say`;
         }
       }
-    }
 
-    // End fallback
-    else {
-      response = 'END Thank you for using Career Buddy.';
-    }
+      // Step 3: Symptom Input
+      else if (inputs.length === 3 && inputs[0] === '1') {
+        const genderSelection = inputs[2];
+        if (!['1', '2', '3'].includes(genderSelection)) {
+          response = 'END Invalid gender selection';
+        } else {
+          response =" CON What symptom are you experiencing? (e.g. chest pain, fever)";
+        }
+      }
 
-    res.setHeader('Content-Type', 'text/plain');
-    res.end(response);
+      // Step 4: Duration Input
+      else if (inputs.length === 4 && inputs[0] === '1') {
+        response =" CON How long have you had this symptom? (in days)";
+      }
+
+      // Step 5: AI Assessment + SMS
+      else if (inputs.length === 5 && inputs[0] === '1') {
+        const age = inputs[1];
+        const genderSelection = inputs[2];
+        const symptom = inputs[3].slice(0, 100); // Limit length
+        const duration = inputs[4];
+
+        if (!phone || !age || !genderSelection || !symptom || !duration || isNaN(duration)) {
+          response = 'END Missing or invalid information. Please try again.';
+        } else {
+          const genderMap = {
+            '1': 'Male',
+            '2': 'Female',
+            '3': 'Other'
+          };
+          const gender = genderMap[genderSelection] || 'Unknown';
+
+          try {
+            const prompt = `
+You're a helpful medical AI assistant for low-resource clinics in Kenya.
+
+A ${gender}, aged ${age}, is experiencing "${symptom}" for ${duration} days.
+
+Respond with:
+- A possible condition (keep it simple).
+- Risk level (Low, Medium, High).
+- What they should do next (e.g. self-care, visit clinic, emergency).
+- Suggest the nearest clinic if known.
+
+Keep it short and clear (within SMS limits).
+            `.trim();
+
+            const aiRes = await axios.post(
+              'https://api.openai.com/v1/chat/completions',
+              {
+                model: 'gpt-4',
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.7
+              },
+              {
+                headers: {
+                  Authorization: "Bearer ${process.env.OPENAI_API_KEY}",
+                  "Content-Type": 'application/json'
+                },
+                timeout: 10000 // 10 seconds timeout
+              }
+            );
+
+            const aiReply = aiRes.data?.choices?.[0]?.message?.content?.trim();
+            if (!aiReply) throw new Error('Empty AI reply');
+
+            // Send full info via SMS
+            try {
+              await sms.send({
+                to: [phone],
+                message: "🩺 AfyaLink Triage Result:\n\n${aiReply.slice(0, 160)}", // Ensure SMS length limit
+                from: 'AFYALINK'
+              });
+
+              const summary = aiReply.split('.').slice(0, 2).join('. ') + '.';
+              response =" END ${summary}\n📩 Full triage result sent via SMS.";
+            } catch (smsErr) {
+              console.error('SMS error:', smsErr.message);
+              response =" END ${aiReply.slice(0, 200)}...\n(SMS failed to send)";
+            }
+
+          } catch (aiErr) {
+            console.error('AI error:', aiErr.message);
+            response = 'END Sorry, we couldn\'t process your request. Please try again later.';
+          }
+        }
+      }
+
+      // Fallback
+      else {
+        response = 'END Thank you for using AfyaLink. Stay safe! 🙏🏽';
+      }
+
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.end(response);
+    } catch (err) {
+      console.error('Unexpected error:', err);
+      res.status(500).setHeader('Content-Type', 'text/plain');
+      res.end('An unexpected error occurred');
+    }
   });
 };
