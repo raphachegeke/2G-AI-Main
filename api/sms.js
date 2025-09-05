@@ -51,6 +51,7 @@ module.exports = async (req, res) => {
       await sms.send({
         to: [senderNumber],
         message: aiReply,
+	from: Rapha
       });
 
       return res.status(200).send('Response sent successfully.');
