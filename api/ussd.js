@@ -81,8 +81,7 @@ You're an expert AI helping Kenyan students. A student from ${location} enjoys $
 Suggest 2 affordable and nearby institutions they can join (e.g. NairoBits, TVETs, community colleges). 
 Also mention 2 ideal careers and a short reason why. 
 Format like:
-1. NairoBits Trust - offers coding & digital skills. Located in Nairobi.
-2. Career: Web Developer - fits students strong in ${subject}.
+Career: Web Developer - fits students strong in ${subject}.
 Keep it short, local, and motivating.
           `.trim();
 
