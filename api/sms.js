@@ -31,12 +31,7 @@ module.exports = async (req, res) => {
         'https://api.cohere.ai/v1/chat',
         {
           model: 'command-a-03-2025',
-          message: `Respond to the following SMS message in a respectful, clear, and helpful tone.
-          you are tutoring a student in maths, English and sciences.
-          dont give direct answers, instead guide them to the answer.
-          Keep your response concise and to the point.
-          Message
-          : "${userMessage}"`,
+          message: `Respond to the following SMS message in a respectful, clear, and helpful tone: "${userMessage}"`,
           temperature: 0.7
         },
         {
@@ -56,7 +51,7 @@ module.exports = async (req, res) => {
       await sms.send({
         to: [senderNumber],
         message: aiReply,
-        from: '5679'
+	from: '5679'
       });
 
       return res.status(200).send('Response sent successfully.');
