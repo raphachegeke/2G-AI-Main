@@ -141,8 +141,8 @@ const sms = africastalking.SMS;
 // Fake DB for reports and sponsorships
 const fakeDB = {
   reports: [
-    { student: "John Doe", report: "Progressing well, needs more books." },
-    { student: "Jane Doe", report: "Excellent in maths, struggling with English." }
+    { student: "Rapha Chege", report: "Progressing well, needs more books." },
+    { student: "Derrick Maina", report: "Excellent in maths, struggling with English." }
   ],
   sponsors: {
     "254700111222": "Yes, sponsored by Equity Foundation",
@@ -195,7 +195,7 @@ module.exports = async (req, res) => {
         await sms.send({
           to: [phone],
           message: "📩 Pathways Aid: A tutor has been assigned to you. Expect a call within 24 hours.",
-          from: "Pathways Aid"
+          from: "Career Buddy"
         });
         response = "END Tutor request received! 📩 Details sent via SMS.";
       } else {
@@ -257,7 +257,7 @@ module.exports = async (req, res) => {
         await sms.send({
           to: [phone],
           message: `📢 Sponsorship Status: ${sponsorInfo}`,
-          from: "Pathways Aid"
+          from: "Career Buddy"
         });
         response = "END Sponsorship info sent via SMS.";
       } else {
