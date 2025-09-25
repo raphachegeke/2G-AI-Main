@@ -88,7 +88,7 @@ Keep it short, local, and motivating.
           const aiRes = await axios.post(
             'https://api.cohere.ai/v1/chat',
             {
-              model: 'command-r-plus',
+              model: 'command-a-03-2025',
               message: aiPrompt,
               temperature: 0.7
             },

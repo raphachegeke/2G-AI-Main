@@ -30,7 +30,7 @@ module.exports = async (req, res) => {
       const aiResponse = await axios.post(
         'https://api.cohere.ai/v1/chat',
         {
-          model: 'command-r-plus',
+          model: 'command-a-03-2025',
           message: `Respond to the following SMS message in a respectful, clear, and helpful tone: "${userMessage}"`,
           temperature: 0.7
         },
