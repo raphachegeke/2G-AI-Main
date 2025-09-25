@@ -26,7 +26,7 @@ module.exports = async (req, res) => {
     const aiRes = await axios.post(
       'https://api.cohere.ai/v1/chat',
       {
-        model: 'command-r-plus',
+        model: 'command-a-03-2025',
         message: `Reply helpfully to: "${userMessage}"`,
         temperature: 0.7
       },
